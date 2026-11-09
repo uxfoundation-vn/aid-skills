@@ -1,0 +1,192 @@
+<meta charset="utf-8">
+<style>
+  /* Figma's own menu tokens (same dark menu surface as the browser panel), with fallbacks if Figma renames them. */
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { background: var(--figma-color-bg-menu, #1e1e1e); }
+  body { margin: 0; padding: 8px; font: 450 11px/16px Inter, system-ui, sans-serif; color: var(--figma-color-text-menu, #fff); -webkit-font-smoothing: antialiased; }
+  button { font: inherit; color: inherit; cursor: pointer; margin: 0; }
+  .head { display: flex; align-items: center; gap: 4px; padding: 0 0 0 8px; height: 24px; margin-bottom: 4px; }
+  .head .t { flex: 1; font-weight: 550; }
+  .ib { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: none; border-radius: 5px; background: none; flex-shrink: 0; color: var(--figma-color-icon-menu, #fff); }
+  .ib:hover { background: var(--figma-color-bg-menu-hover, #2c2c2c); }
+  .ib.dim { color: var(--figma-color-icon-menu-secondary, #ffffffb2); }
+  .off { padding: 4px 8px; color: var(--figma-color-text-menu-danger, #f24822); }
+  .empty { padding: 4px 8px; color: var(--figma-color-text-menu-secondary, #ffffffb2); }
+  .ss { margin-top: 8px; }
+  .sh { display: flex; align-items: center; gap: 4px; padding: 0 0 0 8px; height: 24px; color: var(--figma-color-text-menu-secondary, #ffffffb2); }
+  .sh { cursor: pointer; padding-left: 0; }
+  .sh:hover .who { color: var(--figma-color-text-menu, #fff); }
+  .sh .cv { flex-shrink: 0; width: 24px; height: 24px; padding: 4px; color: var(--figma-color-icon-menu-secondary, #ffffffb2); }
+  .sh.folded .cv { transform: rotate(180deg); }
+  .del { width: 24px; height: 24px; padding: 4px; border: none; border-radius: 5px; background: none; flex-shrink: 0; color: var(--figma-color-icon-menu-secondary, #ffffffb2); }
+  .del:hover { background: var(--figma-color-bg-menu-hover, #2c2c2c); color: var(--figma-color-text-menu-danger, #f24822); }
+  .del.arm { width: auto; padding: 0 8px; background: var(--figma-color-bg-menu-danger, #f24822); color: #fff; }
+  .who { flex: 1; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ago { flex-shrink: 0; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 8px; }
+  .tab { position: relative; height: 24px; padding: 0 8px; border-radius: 5px; border: 1px solid var(--figma-color-border-menu, #383838); background: transparent; }
+  .tab:hover { background: var(--figma-color-bg-menu-hover, #2c2c2c); }
+  .tab.on, .tab.on:hover { background: var(--figma-color-bg-menu-selected, #0d99ff); border-color: var(--figma-color-bg-menu-selected, #0d99ff); color: var(--figma-color-text-menu-onselected, #fff); }
+  .tab.new::after { content: ''; position: absolute; top: -3px; right: -3px; width: 6px; height: 6px; border-radius: 50%; background: var(--figma-color-bg-menu-selected, #0d99ff); box-shadow: 0 0 0 1.5px var(--figma-color-bg-menu, #1e1e1e); }
+  .ttl { font-weight: 550; padding: 4px 8px; }
+  .grp { font-weight: 550; color: var(--figma-color-text-menu-secondary, #ffffffb2); padding: 8px 8px 0; height: 24px; }
+  .it { display: block; width: 100%; height: 24px; text-align: left; padding: 0 8px; border: none; border-radius: 5px; background: transparent; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .it.on { background: var(--figma-color-bg-menu-selected-secondary, #394360); }
+  .it.bad { color: var(--figma-color-text-menu-danger, #f24822); }
+  .it:hover { background: var(--figma-color-bg-menu-selected, #0d99ff); color: var(--figma-color-text-menu-onselected, #fff); }
+  /* Minimized: only the "Layer đã sửa" row; a blue dot beside the title means a round came in meanwhile. */
+  body.min .head { margin-bottom: 0; }
+  .head .new { width: 6px; height: 6px; border-radius: 50%; background: var(--figma-color-bg-menu-selected, #0d99ff); margin-right: 4px; flex-shrink: 0; }
+</style>
+<div id="app"></div>
+<script>
+// Claude Nav board for the file this plugin runs in: one group per Claude session that pushed here, each with its own R1–R3.
+const URL_ = 'http://localhost:3847';
+const WIDTH = 280;
+let info = null, sessions = [], rev = null, cmdN = null, online = true, minimized = false;
+let active = null;          // {sid, code} shown expanded
+let pickedAt = 0;           // last time the user clicked a tab; new pushes don't steal focus for a minute after that
+const seen = new Set();     // sid|code|at of rounds already looked at; others get a blue dot
+const marks = {};           // node id -> 'on' | 'bad' after a jump
+const folded = new Set();   // sids of sessions collapsed to their header row (the window grows with content, no height cap)
+let armed = null;           // sid whose delete button was clicked once; a second click within 3s deletes it
+const I_TRASH = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.5 8h5l.5-8"/></svg>';
+const I_CHEV = '<svg class="cv" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5L8 10l3.5-3.5"/></svg>';
+let firstLoad = true;
+
+const app = document.getElementById('app');
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const icon = (svg, cls, title, onclick) => { const b = el('button', 'ib' + (cls ? ' ' + cls : '')); b.innerHTML = svg; b.title = title; b.setAttribute('aria-label', title); b.onclick = onclick; return b; };
+const toCode = (m) => parent.postMessage({ pluginMessage: m }, '*');
+const tkey = (s, t) => s.sid + '|' + t.code + '|' + t.at;
+const ago = (t) => { const d = Date.now() / 1000 - t; return d < 60 ? 'vừa xong' : d < 3600 ? Math.floor(d / 60) + ' phút' : d < 86400 ? Math.floor(d / 3600) + ' giờ' : Math.floor(d / 86400) + ' ngày'; };
+// Items are [id, label]; tolerate {id, label, note} objects too so one odd push never breaks the whole board.
+const norm = (it) => Array.isArray(it) ? it : [it && it.id || null, [it && it.label, it && it.note].filter(Boolean).join(' — ')];
+const latest = (s) => s.turns.reduce((a, t) => (!a || t.at > a.at ? t : a), null);
+// Figma-style 1px-stroke icons on a 24px box.
+const I_MIN = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"><path d="M7.5 12h9"/></svg>';
+const I_EXPAND = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 10l3.5-3.5 3.5 3.5M8.5 14l3.5 3.5 3.5-3.5"/></svg>';
+
+function pickNewest() {
+  let best = null;
+  sessions.forEach(s => { const t = latest(s); if (t && (!best || t.at > best.t.at)) best = { s, t }; });
+  return best && { sid: best.s.sid, code: best.t.code };
+}
+
+function show(sid, code) {
+  active = { sid, code };
+  const s = sessions.find(x => x.sid === sid), t = s && s.turns.find(x => x.code === code);
+  if (t) seen.add(tkey(s, t));
+  render();
+}
+
+function setMin(on) {
+  minimized = on; toCode({ type: 'min', on });
+  // Expanding after a round came in (the blue dot) opens straight on the newest round.
+  const n = !on && sessions.some(s => s.turns.some(t => !seen.has(tkey(s, t)))) && pickNewest();
+  if (n) show(n.sid, n.code); else render();
+}
+
+function render() {
+  app.textContent = '';
+  document.body.classList.toggle('min', minimized);
+  const head = el('div', 'head'); head.appendChild(el('span', 't', 'Layer đã sửa'));
+  if (minimized && sessions.some(s => s.turns.some(t => !seen.has(tkey(s, t))))) head.appendChild(el('span', 'new'));
+  head.appendChild(minimized ? icon(I_EXPAND, '', 'Mở rộng', () => setMin(false)) : icon(I_MIN, '', 'Thu nhỏ', () => setMin(true)));
+  app.appendChild(head);
+  if (minimized) return fit();
+  if (!online) app.appendChild(el('div', 'off', 'Chưa nối được Claude. Mở một session Claude Code (server tự bật), bảng tự nối lại trong 1 giây.'));
+  if (!sessions.length) { if (online) app.appendChild(el('div', 'empty', 'Chưa có lượt nào ở file này.')); return fit(); }
+  sessions.forEach(s => {
+    const fold = folded.has(s.sid);
+    const head = el('div', 'sh ss' + (fold ? ' folded' : '')); head.title = (fold ? 'Mở ' : 'Thu ') + s.who;
+    head.onclick = () => { fold ? folded.delete(s.sid) : folded.add(s.sid); render(); };
+    head.insertAdjacentHTML('beforeend', I_CHEV);
+    head.appendChild(el('span', 'who', s.who));
+    head.appendChild(el('span', 'ago', ago(s.at)));
+    const arm = armed === s.sid;
+    const del = el('button', 'del' + (arm ? ' arm' : ''));
+    if (arm) del.textContent = 'Xoá?'; else del.innerHTML = I_TRASH;
+    del.title = arm ? 'Bấm lần nữa để xoá session này khỏi bảng' : 'Xoá session này khỏi bảng';
+    del.onclick = (e) => {
+      e.stopPropagation();
+      if (!arm) { armed = s.sid; render(); setTimeout(() => { if (armed === s.sid) { armed = null; render(); } }, 3000); return; }
+      armed = null;
+      post('/hide', { file: info.file, sid: s.sid }).then(() => { rev = null; tick(); }).catch(() => render());
+    };
+    head.appendChild(del);
+    app.appendChild(head);
+    if (fold) return;
+    const tabs = el('div', 'tabs');
+    const isAct = active && active.sid === s.sid;
+    s.turns.slice().sort((a, b) => b.at - a.at).forEach(t => {
+      const on = isAct && active.code === t.code;
+      const b = el('button', 'tab' + (on ? ' on' : '') + (!on && !seen.has(tkey(s, t)) ? ' new' : ''), t.code);
+      b.title = t.title; b.onclick = () => { pickedAt = Date.now(); show(s.sid, t.code); };
+      tabs.appendChild(b);
+    });
+    app.appendChild(tabs);
+    const cur = isAct && s.turns.find(t => t.code === active.code);
+    if (!cur) return;
+    app.appendChild(el('div', 'ttl', cur.code + ' · ' + cur.title));
+    let n = 0;
+    cur.items.map(norm).forEach(([id, label]) => {
+      // An item with no id is a group header, e.g. [null, 'C2 · Instance swap'].
+      if (!id) { app.appendChild(el('div', 'grp', label)); return; }
+      const b = el('button', 'it' + (marks[id] ? ' ' + marks[id] : ''), (++n) + ' · ' + label);
+      b.title = label; b.onclick = () => toCode({ type: 'go', id });
+      app.appendChild(b);
+    });
+  });
+  fit();
+}
+
+function fit() {
+  setTimeout(() => toCode({ type: 'resize', w: WIDTH, h: app.offsetHeight + 16 }), 0);
+}
+
+// text/plain keeps these "simple" requests, so no CORS preflight from the plugin's null-origin iframe.
+const post = (path, body) => fetch(URL_ + path, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body) }).then(r => r.json());
+
+function runCmd(c) {
+  // "mở bảng R2" from chat also un-minimizes; "mở 2" only jumps.
+  if (c.type === 'open') { pickedAt = Date.now(); minimized && setMin(false); show(c.sid, c.code); }
+  else if (c.type === 'go') toCode({ type: 'go', id: c.id });
+}
+
+async function tick() {
+  if (!info) return;
+  let reached = false;
+  try {
+    const r = await post('/sync', { file: info.file, name: info.name, page: info.page, sel: info.sel, rev });
+    reached = true;
+    const wasOnline = online; online = true;
+    if (r.sessions) {
+      const before = new Set(); sessions.forEach(s => s.turns.forEach(t => before.add(tkey(s, t))));
+      sessions = r.sessions; rev = r.rev;
+      if (firstLoad) { sessions.forEach(s => s.turns.forEach(t => seen.add(tkey(s, t)))); firstLoad = false; }
+      const stillThere = active && sessions.some(s => s.sid === active.sid && s.turns.some(t => t.code === active.code));
+      const fresh = sessions.some(s => s.turns.some(t => !before.has(tkey(s, t))));
+      // Follow the newest push unless the user picked a tab in the last minute; while minimized it only lights the dot.
+      const n = !minimized && (!stillThere || (fresh && Date.now() - pickedAt > 60000)) && pickNewest();
+      if (n) show(n.sid, n.code); else { if (!stillThere) active = pickNewest(); render(); }
+    } else if (!wasOnline) render();
+    const c = r.cmd;
+    if (c && cmdN === null) { cmdN = c.n; if (Date.now() / 1000 - c.at < 10) runCmd(c); }
+    else if (c && c.n > cmdN) { cmdN = c.n; runCmd(c); }
+  } catch (e) {
+    if (reached) console.error(e);
+    else if (online) { online = false; rev = null; render(); }
+  }
+}
+
+onmessage = (e) => {
+  const m = e.data.pluginMessage; if (!m) return;
+  if (m.type === 'info') { const first = !info; info = m; if (first) { minimized = !!m.min; render(); tick(); } }
+  else if (m.type === 'went') {
+    Object.keys(marks).forEach(k => delete marks[k]); marks[m.id] = m.ok ? 'on' : 'bad'; render();
+  }
+};
+setInterval(tick, 1000);
+</script>

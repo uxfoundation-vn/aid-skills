@@ -1,0 +1,12 @@
+{
+  "name": "aid",
+  "owner": { "name": "AID – AI for Product Designer" },
+  "metadata": { "description": "Bộ công cụ thực hành khóa AI for Product Designer" },
+  "plugins": [
+    {
+      "name": "aid",
+      "source": "./plugins/aid",
+      "description": "Toàn bộ skill thực hành của khóa AID trong một plugin: làm việc với Figma desktop, sắp xếp dự án từ đề bài, audit component, audit và dựng token. Skill setup dẫn cài phần còn lại."
+    }
+  ]
+}
