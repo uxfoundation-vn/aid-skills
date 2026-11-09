@@ -1,6 +1,6 @@
 {
   "name": "aid",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Skill thực hành khóa AI for Product Designer: figma-desktop (layer đang chọn + bảng layer đã sửa), init-project (dựng dự án từ đề bài), ds-audit (audit component, có tầng chuyên sâu đối chiếu component.gallery), ds-token (audit và dựng token). Gõ /aid:setup để cài phần còn lại.",
   "author": { "name": "AID – AI for Product Designer" }
 }
