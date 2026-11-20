@@ -198,10 +198,17 @@ function metersText() {
 }
 
 // the prompt cache's countdown while idle: from the last request's send time to the end of its lifetime
+// (the terminal draws it in the line; the desktop hands cacheEnd() to cache-client.tsx, which counts by itself)
+function cacheEnd() {
+  return info.working || cacheAt === null ? null : cacheAt + cacheTtlMs
+}
+
+const CACHE_EXPIRED = 'cache expired · compact?'
+
 function cacheClock(now: number) {
   if (info.working || cacheAt === null) return ''
   const left = cacheAt + cacheTtlMs - now
-  if (left <= 0) return 'cache expired'
+  if (left <= 0) return CACHE_EXPIRED
   const sec = Math.ceil(left / 1000)
   return `cache ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`
 }
@@ -761,7 +768,7 @@ async function viewAt($: Dollar, s: Settings, t: number) {
   const scene = compose(b, r, effective, l, now, t, tools)
   const pet = petAnim(scene.mood, now)
   const note = compactNote && Date.now() - compactNote.at < 15_000 ? compactNote.text : ''
-  const clockNow = [demoLabel ? '' : turnClock(now), demoLabel ? '' : cacheClock(now), note].filter(Boolean).join(' · ')
+  const clockNow = [demoLabel ? '' : turnClock(now), note].filter(Boolean).join(' · ')
   const withClock = clockNow ? (scene.sub ? `${scene.sub} · ${clockNow}` : clockNow) : scene.sub
   const sub = demoLabel ? `${withClock ? withClock + '  ·  ' : ''}${demoLabel}` : withClock
   return { now, scene, pet, sub }
@@ -778,7 +785,7 @@ async function onTick($: Dollar) {
   const t = await read($, tick)
   const v = await viewAt($, s, t)
   metersFor(v.now)
-  const sig = JSON.stringify([v.scene.main, v.scene.sub, v.sub, v.scene.color, v.scene.border, v.scene.isMainDim, v.pet.anim, metersKey, info.working, info.waiting, repos.length > 0])
+  const sig = JSON.stringify([v.scene.main, v.scene.sub, v.sub, v.scene.color, v.scene.border, v.scene.isMainDim, v.pet.anim, metersKey, info.working, info.waiting, repos.length > 0, cacheEnd()])
   if (sig !== deskSig) {
     deskSig = sig
     await update($, deskTick, () => t)
@@ -1109,6 +1116,11 @@ export const register: Register = on => {
             </Text>
             <Text mono dimColor wrap="truncate-end">
               {sub}
+              {cacheClock(now) ? (
+                <Text color={cacheClock(now) === CACHE_EXPIRED ? RED : undefined} bold={cacheClock(now) === CACHE_EXPIRED}>
+                  {`${sub ? ' · ' : ''}${cacheClock(now)}`}
+                </Text>
+              ) : null}
             </Text>
             <Text mono dimColor wrap="truncate-end">
               {metersText()}
@@ -1139,6 +1151,8 @@ export const register: Register = on => {
     // its gap, and the band's right padding (48 together: the bar then ends ~32 px short of the buttons), and in a repo the ⎇ button and its
     // gap (~48; kept while a turn hides it, so the meters never jump); no inner padding.
     // No border here either (a border pads the band and shifts it): needs-you and tantrums speak through the text color
+    const end = cacheEnd()
+    const demo = (await read($, demoStart)) !== null
     const meterW = Math.max(300, e.props.bodyColumns * 8 - 48 - PET_W - (hasRepo ? 48 : 0))
     const row = (
       <Box alignItems="center" gap={1} paddingRight={1}>
@@ -1157,15 +1171,25 @@ export const register: Register = on => {
               <Svg source={metersFor(now)} alt={metersText()} width={meterW} height={METER_H} isInteractive />
             </Box>
           )}
-          {/* one Text, one row: a long step is cut with an ellipsis at the column's edge */}
-          <Text mono size="caption" color={scene.isMainDim ? LABEL : scene.color} weight={scene.isMainDim ? 'regular' : 'bold'} wrap="truncate-end" maxLines={1}>
-            {scene.main}
-            {sub ? (
-              <Text color={LABEL} weight="regular">
-                {` · ${sub}`}
+          {/* one Text, one row: a long step is cut with an ellipsis at the column's edge; the cache countdown after it
+              counts in its own Client, so its seconds never redraw the band */}
+          <Box key="status" alignItems="center" gap={1} minWidth={0}>
+            <Box flexShrink={1} minWidth={0} overflow="hidden">
+              <Text mono size="caption" color={scene.isMainDim ? LABEL : scene.color} weight={scene.isMainDim ? 'regular' : 'bold'} wrap="truncate-end" maxLines={1}>
+                {scene.main}
+                {sub ? (
+                  <Text color={LABEL} weight="regular">
+                    {` · ${sub}`}
+                  </Text>
+                ) : null}
               </Text>
-            ) : null}
-          </Text>
+            </Box>
+            {Client && end !== null && !demo && (
+              <Box key="cache" flexShrink={0}>
+                <Client key="cache" module="./cache-client.tsx" props={{ endAt: end, now, color: LABEL, expiredColor: RED }} />
+              </Box>
+            )}
+          </Box>
         </Box>
         {/* no Compact while a turn runs: /compact would only queue behind it, and the native button's hover jumped
             with every redraw the turn brings */}
