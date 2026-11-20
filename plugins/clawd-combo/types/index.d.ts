@@ -9,16 +9,12 @@ export type Base = {
   detail: string
 }
 
-export type ReactionKind = 'oops' | 'testsFail' | 'testsPass' | 'loved' | 'hmm' | 'fit'
+export type ReactionKind = 'oops' | 'testsFail' | 'testsPass' | 'loved'
 
 export type Reaction = { kind: ReactionKind; line: string; until: number }
 
 export type Settings = {
   isHidden: boolean
-  moods: boolean
-  reactions: boolean
-  tantrums: boolean
-  hemisphere: 'north' | 'south'
 }
 
 /** a button of the branch rows: `repo:<dir>`, `branch:<name>` or `branch-back` */

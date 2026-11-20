@@ -3,7 +3,7 @@ import type { Elements, EngineInterface, Register } from 'claude-code'
 
 import type { Base, BaseKind, BranchMenu, Reaction, ReactionKind, Settings, ToolsToday } from '../types'
 import { BASE_LOOK, draw, toMiniRaster, toRaster, toSvg } from './sprites'
-import type { Hat, Icon, Look, Particle } from './sprites'
+import type { Icon, Look } from './sprites'
 import { PET_ASPECT, PET_COLUMNS, PET_ROWS, moodForTool, petAnim, petCells, petSvg, shufflePet, type Mood } from './crew-pet'
 import { burnOf, k, metersSvg, span, type Info, type Sample } from './meters'
 
@@ -18,10 +18,6 @@ const base = atom({ plugin: 'clawd-combo', key: 'base' } as const, {
 const reaction = atom({ plugin: 'clawd-combo', key: 'reaction' } as const, null as Reaction | null)
 const settings = atom({ plugin: 'clawd-combo', key: 'settings' } as const, {
   isHidden: false,
-  moods: true,
-  reactions: true,
-  tantrums: true,
-  hemisphere: 'north',
 } as Settings)
 const tick = atom({ plugin: 'clawd-combo', key: 'tick' } as const, 0)
 // the tick the desktop band last changed at: it redraws on this, not on every tick
@@ -30,7 +26,6 @@ const toolsToday = atom({ plugin: 'clawd-combo', key: 'toolsToday' } as const, {
   date: '',
   count: 0,
 } as ToolsToday)
-const demoStart = atom({ plugin: 'clawd-combo', key: 'demoStart' } as const, null as number | null)
 // the branch list under the band, open while it holds the branches; null: closed
 const branchMenu = atom({ plugin: 'clawd-combo', key: 'branchMenu' } as const, null as BranchMenu | null)
 
@@ -255,47 +250,6 @@ const pad = (n: number) => String(n).padStart(2, '0')
 const dateKey = (l: Local) => `${l.year}-${pad(l.month)}-${pad(l.day)}`
 const clock = (l: Local) => `${pad(l.hour)}:${pad(l.minute)}`
 
-// ---------------------------------------------------------------- calendar
-
-type Season = 'winter' | 'spring' | 'summer' | 'autumn'
-type Holiday = 'xmas' | 'newyear' | 'swiss' | 'halloween' | 'april' | 'bday'
-
-function season(l: Local, hemisphere: Settings['hemisphere']): Season {
-  const m = hemisphere === 'south' ? ((l.month + 5) % 12) + 1 : l.month
-  if (m === 12 || m <= 2) return 'winter'
-  if (m <= 5) return 'spring'
-  if (m <= 8) return 'summer'
-  return 'autumn'
-}
-
-function holiday(l: Local): Holiday | undefined {
-  const { month: m, day: d, hour } = l
-  if (m === 12 && d >= 24 && d <= 26) return 'xmas'
-  if ((m === 12 && d === 31 && hour >= 18) || (m === 1 && d === 1)) return 'newyear'
-  if (m === 8 && d === 1) return 'swiss'
-  if (m === 10 && d === 31) return 'halloween'
-  if (m === 4 && d === 1) return 'april'
-  if (m === 2 && d === 24) return 'bday'
-  return undefined
-}
-
-function holidayText(day: Holiday, l: Local): [string, string] {
-  switch (day) {
-    case 'xmas':
-      return ['Merry Xmas!', 'ho ho ho']
-    case 'newyear':
-      return ['Guets Neus!', `hello ${l.month === 12 ? l.year + 1 : l.year}`]
-    case 'swiss':
-      return ['1. August!', 'Happy Swiss Day 🇨🇭']
-    case 'halloween':
-      return ['Boo!', 'happy Halloween']
-    case 'april':
-      return ['Wait what?', 'April fools!']
-    case 'bday':
-      return ['Clawd bday!', `Claude Code turns ${l.year - 2025}`]
-  }
-}
-
 // ---------------------------------------------------------------- words
 
 const VERBS = [
@@ -350,8 +304,6 @@ const PET_REPLIES = [
   'is this what being merged feels like?',
 ]
 
-const HMM_LINES = ['that is twice now…', 'i saw that', 'someone is grumpy', 'breathe in, breathe out']
-const FIT_LINES = ['WHY IS IT STILL BROKEN', 'i am a professional', 'this is fine 🔥', 'not again!!']
 
 let lastPick = ''
 function pick(list: string[]) {
@@ -359,15 +311,6 @@ function pick(list: string[]) {
   if (s === lastPick && list.length > 1) s = list[(list.indexOf(s) + 1) % list.length]
   lastPick = s
   return s
-}
-
-const FRUSTRATED =
-  /\b(wtf|wth|ffs|omg|ugh+|argh+|damn|dammit|shit|crap|still (not|broken|failing|wrong|doesn'?t)|doesn'?t work|not working|does not work|why (is|does|won'?t|isn'?t)|seriously|come on|cmon|stupid|useless|i said|what the|nope|scheiss\w*|verdammt|gopf\w*|huere\w*|chabis|nid (gange|funktioniert)|geit nid|funktioniert (immer no |immer noch )?(nid|nicht)|isch kaputt)\b|!!+|\?\?+|\?!|!\?/i
-
-function isFrustrated(text: string) {
-  if (FRUSTRATED.test(text)) return true
-  const shouty = text.match(/\b[A-ZÄÖÜ]{4,}\b/g) ?? []
-  return shouty.length >= 2
 }
 
 // ---------------------------------------------------------------- tools
@@ -465,7 +408,6 @@ const HOP = [0, -1, -2, -1]
 function compose(
   b: Base,
   r: Reaction | null,
-  s: Settings,
   l: Local,
   now: number,
   t: number,
@@ -491,7 +433,6 @@ function compose(
   if (kind === 'idle' && now - idleSince > 600_000) kind = 'sleep'
 
   const isNight = l.hour >= 22 || l.hour < 6
-  const hol = s.moods ? holiday(l) : undefined
 
   switch (kind) {
     case 'hi':
@@ -558,16 +499,9 @@ function compose(
       scene.mood = 'idle'
       look.eyes = t % 16 === 0 ? 'closed' : 'open'
       look.eyeDx = [0, 0, -1, -1, 0, 0, 1, 1][Math.floor(t / 4) % 8]
-      if (hol && Math.floor(t / 16) % 2 === 1) {
-        const [a, c] = holidayText(hol, l)
-        scene.main = a
-        scene.sub = c
-        scene.color = ORANGE
-      } else {
-        scene.main = clock(l)
-        scene.sub = `${tools} tools today`
-        scene.isMainDim = true
-      }
+      scene.main = clock(l)
+      scene.sub = `${tools} tools today`
+      scene.isMainDim = true
       break
     case 'sleep':
       scene.mood = 'sleeping'
@@ -585,8 +519,7 @@ function compose(
     r !== null &&
     now < r.until &&
     (r.kind === 'loved' ||
-      ((r.kind === 'hmm' || r.kind === 'fit') && s.tantrums) ||
-      ((r.kind === 'oops' || r.kind === 'testsFail' || r.kind === 'testsPass') && s.reactions))
+      r.kind === 'oops' || r.kind === 'testsFail' || r.kind === 'testsPass')
   if (isReacting && r) {
     look.dim = 1
     look.particles = look.particles.filter(p => p === 'snow' || p === 'petals' || p === 'leaves')
@@ -633,110 +566,11 @@ function compose(
         scene.sub = 'Clawd · loved'
         scene.color = undefined
         break
-      case 'hmm':
-        look.eyes = 'angry'
-        look.eyeDx = -1
-        look.icon = undefined
-        scene.mood = 'thinking'
-        scene.main = 'Hmm…'
-        scene.sub = r.line
-        scene.color = AMBER
-        break
-      case 'fit':
-        look.eyes = 'angry'
-        look.dx = [0, -1, 1, 0][t % 4]
-        look.legs = 'stomp'
-        look.arms = 'up'
-        look.icon = undefined
-        look.particles.push('steam')
-        scene.mood = 'error'
-        scene.border = t % 2 === 0 ? RED : '#7a2020'
-        scene.main = t % 8 < 4 ? 'FIX IT?!' : 'deep breaths…'
-        scene.sub = r.line
-        scene.color = RED
-        break
     }
-  }
-
-  // moods: time of day, season, holidays
-  if (s.moods) {
-    const sea = season(l, s.hemisphere)
-    const holidayHat: Partial<Record<Holiday, Hat>> = {
-      xmas: 'santa',
-      newyear: 'party',
-      bday: 'party',
-      halloween: 'witch',
-    }
-    look.hat =
-      (hol && holidayHat[hol]) ??
-      (isNight ? 'nightcap' : sea === 'winter' ? 'beanie' : sea === 'spring' ? 'flower' : undefined)
-    look.hasPajamas = isNight
-    look.hasFlag = hol === 'swiss'
-    look.hasMug = l.hour >= 6 && l.hour < 10 && !look.hasFlag
-    look.hasSun = sea === 'summer' && l.hour >= 7 && l.hour < 20 && !look.hasFlag
-    look.hasGlasses = sea === 'summer' && l.hour >= 11 && l.hour < 17
-    const weather: Particle[] = []
-    if (sea === 'winter' || hol === 'xmas') weather.push('snow')
-    else if (sea === 'spring') weather.push('petals')
-    else if (sea === 'autumn') weather.push('leaves')
-    if ((hol === 'newyear' && (l.hour >= 20 || l.hour < 6)) || (hol === 'swiss' && l.hour >= 20)) {
-      weather.push('fireworks')
-    }
-    look.particles = [...weather, ...look.particles.filter(p => !weather.includes(p))]
-    look.isFlipped = hol === 'april' && kind === 'idle' && !isReacting
-    if (kind === 'sleep' && isNight) look.dim = 0.3
   }
 
   return scene
 }
-
-// ---------------------------------------------------------------- demo
-
-type Demo = {
-  label: string
-  base: [BaseKind, string, string, number?]
-  reaction?: [ReactionKind, string]
-  local?: Partial<Local>
-}
-
-const DEMOS: Demo[] = [
-  { label: 'Hi', base: ['hi', '', ''] },
-  { label: 'Thinking', base: ['thinking', 'Noodling…', ''] },
-  { label: 'Working · terminal', base: ['working', '$ flutter test', 'Bash'] },
-  { label: 'Working · pencil', base: ['working', 'editing main.dart', 'Edit'] },
-  { label: 'Working · magnifier', base: ['working', 'reading pubspec.yaml', 'Read'] },
-  { label: 'Working · globe', base: ['working', 'claude.dev/blog', 'WebFetch'] },
-  { label: 'Working · mini-Clawd', base: ['working', 'calling in a friend', 'Agent'] },
-  { label: 'Working · bolt', base: ['working', 'pixellab · create_character', 'mcp__pixellab__create_character'] },
-  { label: 'Needs you · permission', base: ['needs', 'Bash wants to run', 'permission'] },
-  { label: 'Needs you · question', base: ['needs', 'Claude has a question', 'question'] },
-  { label: 'Needs you · plan', base: ['needs', 'plan is ready for review', 'plan'] },
-  { label: 'Needs you · impatient', base: ['needs', 'Bash wants to run', 'permission', 25_000] },
-  { label: 'Done', base: ['done', '3m 12s · 14 tools', ''] },
-  { label: 'Compacting', base: ['compacting', '', ''] },
-  { label: 'Idle', base: ['idle', '', ''], local: { month: 10, day: 3, hour: 15 } },
-  { label: 'Sleep', base: ['idle', '', '', 700_000], local: { month: 10, day: 3, hour: 15 } },
-  { label: 'Oops', base: ['working', '', 'Bash'], reaction: ['oops', 'Bash failed'] },
-  { label: 'Tests failed', base: ['working', '', 'Bash'], reaction: ['testsFail', '12 passed, 2 failed'] },
-  { label: 'Tests pass', base: ['working', '', 'Bash'], reaction: ['testsPass', '42 passed'] },
-  { label: 'Loved', base: ['idle', '', ''], reaction: ['loved', '♥ ♥ ♥'] },
-  { label: 'Tantrum · hmm', base: ['thinking', 'Mulling…', ''], reaction: ['hmm', 'that is twice now…'] },
-  { label: 'Tantrum · fit', base: ['thinking', 'Mulling…', ''], reaction: ['fit', 'WHY IS IT STILL BROKEN'] },
-  { label: 'Morning', base: ['idle', '', ''], local: { month: 10, day: 3, hour: 8 } },
-  { label: 'Night', base: ['idle', '', ''], local: { month: 10, day: 3, hour: 23 } },
-  { label: 'Night · asleep', base: ['idle', '', '', 700_000], local: { month: 10, day: 3, hour: 23 } },
-  { label: 'Winter', base: ['idle', '', ''], local: { month: 1, day: 15, hour: 14 } },
-  { label: 'Spring', base: ['idle', '', ''], local: { month: 4, day: 15, hour: 14 } },
-  { label: 'Summer', base: ['idle', '', ''], local: { month: 7, day: 15, hour: 14 } },
-  { label: 'Autumn', base: ['idle', '', ''], local: { month: 10, day: 10, hour: 14 } },
-  { label: 'Xmas', base: ['idle', '', ''], local: { month: 12, day: 24, hour: 15 } },
-  { label: 'New Year', base: ['idle', '', ''], local: { month: 12, day: 31, hour: 22 } },
-  { label: '1. August', base: ['idle', '', ''], local: { month: 8, day: 1, hour: 21 } },
-  { label: 'Halloween', base: ['idle', '', ''], local: { month: 10, day: 31, hour: 15 } },
-  { label: 'April fools', base: ['idle', '', ''], local: { month: 4, day: 1, hour: 15 } },
-  { label: 'Clawd bday', base: ['idle', '', ''], local: { month: 2, day: 24, hour: 15 } },
-]
-const DEMO_MS = 3_500
 
 // ---------------------------------------------------------------- hooks
 
@@ -745,32 +579,16 @@ const TOOLS_KEY = 'tools-today'
 // what the band shows at tick t: shared by the render and by onTick, which works out whether the desktop changed
 async function viewAt($: Dollar, s: Settings, t: number) {
   const now = await $.clock.now()
-  let b = await read($, base)
-  let r = await read($, reaction)
-  let l = localTime(now)
+  const b = await read($, base)
+  const r = await read($, reaction)
+  const l = localTime(now)
   const counted = await read($, toolsToday)
   const tools = counted.date === dateKey(l) ? counted.count : 0
-  let effective = s
-  let demoLabel = ''
-
-  const start = await read($, demoStart)
-  const index = start === null ? -1 : Math.floor((now - start) / DEMO_MS)
-  if (index >= 0 && index < DEMOS.length) {
-    const d = DEMOS[index]
-    const [kind, line, detail, age = 0] = d.base
-    b = { kind, line, detail, since: now - age }
-    r = d.reaction ? { kind: d.reaction[0], line: d.reaction[1], until: now + 1_000 } : null
-    l = { ...l, minute: 0, ...d.local }
-    effective = { ...s, moods: true, reactions: true, tantrums: true }
-    demoLabel = `demo ${index + 1}/${DEMOS.length} · ${d.label}`
-  }
-
-  const scene = compose(b, r, effective, l, now, t, tools)
+  const scene = compose(b, r, l, now, t, tools)
   const pet = petAnim(scene.mood, now)
   const note = compactNote && Date.now() - compactNote.at < 15_000 ? compactNote.text : ''
-  const clockNow = [demoLabel ? '' : turnClock(now), note].filter(Boolean).join(' · ')
-  const withClock = clockNow ? (scene.sub ? `${scene.sub} · ${clockNow}` : clockNow) : scene.sub
-  const sub = demoLabel ? `${withClock ? withClock + '  ·  ' : ''}${demoLabel}` : withClock
+  const clockNow = [turnClock(now), note].filter(Boolean).join(' · ')
+  const sub = clockNow ? (scene.sub ? `${scene.sub} · ${clockNow}` : clockNow) : scene.sub
   return { now, scene, pet, sub }
 }
 
@@ -790,10 +608,6 @@ async function onTick($: Dollar) {
     deskSig = sig
     await update($, deskTick, () => t)
   }
-  const start = await read($, demoStart)
-  if (start !== null && (await $.clock.now()) - start > DEMOS.length * DEMO_MS) {
-    await update($, demoStart, () => null)
-  }
 }
 
 async function pet($: Dollar) {
@@ -804,13 +618,12 @@ export const register: Register = on => {
   let isTurnRunning = false
   let turnStartedAt = 0
   let turnTools = 0
-  let frustrations: number[] = []
   let toolsInFlight = 0
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'clawd',
-      description: 'Clawd: on/off, demo, moods|reactions|tantrums on|off, hemisphere north|south',
+      description: 'Clawd: show or hide (on|off)',
     })
     const saved = (await $.store.get(SETTINGS_KEY)) as Partial<Settings> | undefined
     if (saved) await update($, settings, s => ({ ...s, ...saved }))
@@ -826,49 +639,10 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'clawd' }, async ($, e) => {
-    const [word = '', value = ''] = e.args.trim().toLowerCase().split(/\s+/)
-    const onOff = (v: string) => v !== 'off' && v !== 'false' && v !== '0'
-
-    if (word === '') {
-      const hidden = !(await read($, settings)).isHidden
-      await saveSettings($, { isHidden: hidden })
-      return { text: hidden ? 'Clawd went to nap.' : 'Clawd is back.' }
-    }
-    if (word === 'on' || word === 'off') {
-      await saveSettings($, { isHidden: word === 'off' })
-      return { text: word === 'off' ? 'Clawd went to nap.' : 'Clawd is back.' }
-    }
-    if (word === 'demo') {
-      if (value === 'stop') {
-        await update($, demoStart, () => null)
-        return { text: 'Demo stopped.' }
-      }
-      await saveSettings($, { isHidden: false })
-      const start = await $.clock.now()
-      await update($, demoStart, () => start)
-      return {
-        text: `Clawd demo: ${DEMOS.length} looks, ${DEMO_MS / 1000}s each. /clawd demo stop ends it.`,
-      }
-    }
-    if (word === 'moods' || word === 'reactions' || word === 'tantrums') {
-      await saveSettings($, { [word]: onOff(value) })
-      return { text: `Clawd ${word}: ${onOff(value) ? 'on' : 'off'}` }
-    }
-    if (word === 'hemisphere' && (value === 'north' || value === 'south')) {
-      await saveSettings($, { hemisphere: value })
-      return { text: `Clawd seasons: ${value}ern hemisphere` }
-    }
-    const s = await read($, settings)
-    return {
-      text: [
-        '/clawd                     show or hide',
-        '/clawd demo [stop]         walk through every look',
-        `/clawd moods on|off        seasons, holidays, time of day (${s.moods ? 'on' : 'off'})`,
-        `/clawd reactions on|off    oops and test results (${s.reactions ? 'on' : 'off'})`,
-        `/clawd tantrums on|off     Clawd judges your frustration (${s.tantrums ? 'on' : 'off'})`,
-        `/clawd hemisphere north|south  (${s.hemisphere})`,
-      ].join('\n'),
-    }
+    const word = e.args.trim().toLowerCase()
+    const hidden = word === 'on' ? false : word === 'off' ? true : !(await read($, settings)).isHidden
+    await saveSettings($, { isHidden: hidden })
+    return { text: hidden ? 'Clawd went to nap.' : 'Clawd is back.' }
   })
 
   let ticker: { cancel: () => void } | null = null
@@ -920,13 +694,6 @@ export const register: Register = on => {
     turnStartedAt = await $.clock.now()
     turnTools = 0
     await setBase($, 'thinking', pick(VERBS))
-
-    if (isFrustrated(e.text)) {
-      const now = await $.clock.now()
-      frustrations = [...frustrations.filter(at => now - at < 1_200_000), now]
-      if (frustrations.length === 2) await react($, 'hmm', pick(HMM_LINES), 4_000)
-      if (frustrations.length >= 3) await react($, 'fit', pick(FIT_LINES), 5_000)
-    }
 
     return next(e)
   })
@@ -1150,9 +917,8 @@ export const register: Register = on => {
     // cells (8 CSS px each) less the pet (85), what the cells overcount past the band's own edge, the Compact button and
     // its gap, and the band's right padding (48 together: the bar then ends ~32 px short of the buttons), and in a repo the ⎇ button and its
     // gap (~48; kept while a turn hides it, so the meters never jump); no inner padding.
-    // No border here either (a border pads the band and shifts it): needs-you and tantrums speak through the text color
+    // No border here either (a border pads the band and shifts it): needs-you and reactions speak through the text color
     const end = cacheEnd()
-    const demo = (await read($, demoStart)) !== null
     const meterW = Math.max(300, e.props.bodyColumns * 8 - 48 - PET_W - (hasRepo ? 48 : 0))
     const row = (
       <Box alignItems="center" gap={1} paddingRight={1}>
@@ -1184,7 +950,7 @@ export const register: Register = on => {
                 ) : null}
               </Text>
             </Box>
-            {Client && end !== null && !demo && (
+            {Client && end !== null && (
               <Box key="cache" flexShrink={0}>
                 <Client key="cache" module="./cache-client.tsx" props={{ endAt: end, now, color: LABEL, expiredColor: RED }} />
               </Box>

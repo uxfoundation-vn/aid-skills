@@ -38,11 +38,12 @@ Cài xong mở **session mới** là thấy mod.
 | Gõ | Làm gì |
 |---|---|
 | `/clawd` | Ẩn hoặc hiện mod |
-| `/clawd demo` | Cho Clawd diễn lần lượt mọi dáng. Gõ `/clawd demo stop` để dừng |
-| `/clawd moods on\|off` | Clawd đổi theo mùa, ngày lễ, giờ trong ngày |
-| `/clawd reactions on\|off` | Clawd phản ứng khi lệnh lỗi và khi có kết quả test |
-| `/clawd tantrums on\|off` | Clawd dỗi khi bạn cáu với Claude |
-| `/clawd hemisphere north\|south` | Chọn bán cầu để tính mùa cho đúng (Việt Nam là `north`) |
+| `/clawd off` | Ẩn mod |
+| `/clawd on` | Hiện lại mod |
+
+## Các dáng của Clawd
+
+Mỗi trạng thái có 3 kiểu, Clawd chọn ngẫu nhiên một kiểu. Trên app desktop, bấm vào pet để đổi sang kiểu khác. Xem đủ mọi dáng (ảnh động) ở [docs/PETS.md](docs/PETS.md).
 
 ## Cập nhật
 
