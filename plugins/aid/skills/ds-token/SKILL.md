@@ -1,6 +1,6 @@
 ---
 name: ds-token
-description: Skill tổng cho token (Figma Variables) của Design System. Tìm hoặc lập hồ sơ DS (ds-profile.md), nhận diện bộ token có sẵn thuộc cấu trúc nào, rồi điều hướng sang ds-token-build (dựng) hoặc ds-token-audit (kiểm). Dùng khi người dùng bảo "token", "variables", "dựng token", "audit token", "bộ token này theo cấu trúc gì", "đổi theme không ăn", hoặc gõ /ds-token. Luôn bắt đầu từ skill này khi chưa có ds-profile.md.
+description: Skill tổng cho token (Figma Variables) của Design System. Tìm hoặc lập hồ sơ DS (ds-profile.md), nhận diện bộ token có sẵn thuộc cấu trúc nào, rồi điều hướng sang ds-token-build (dựng) hoặc ds-token-audit (kiểm). Dùng khi người dùng bảo "token", "variables", "dựng token", "audit token", "bộ token này theo cấu trúc gì", "đổi theme không ăn", hoặc gõ /aid:ds-token. Luôn bắt đầu từ skill này khi chưa có ds-profile.md.
 ---
 
 # ds-token: skill tổng

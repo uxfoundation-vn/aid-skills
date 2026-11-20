@@ -1,6 +1,6 @@
 ---
 name: ds-audit
-description: Audit component trong file Figma Design System theo chuẩn agent-friendly. Chỉ quét và đề xuất, không sửa file. Dùng khi người dùng bảo "audit component", "check component", "quét DS", "component này đúng chuẩn chưa", hoặc gõ /ds-audit. Có 2 tầng: cơ bản (kiểm cú pháp theo chuẩn) và chuyên sâu (đối chiếu thêm với các design system thật trên component.gallery để bắt lỗi thiếu state). Skill này điều hướng sang các skill con ds-audit-component-naming, ds-audit-property-naming, ds-audit-structure, ds-audit-description, ds-audit-canvas, ds-audit-sources.
+description: Audit component trong file Figma Design System theo chuẩn agent-friendly. Chỉ quét và đề xuất, không sửa file. Dùng khi người dùng bảo "audit component", "check component", "quét DS", "component này đúng chuẩn chưa", hoặc gõ /aid:ds-audit. Có 2 tầng: cơ bản (kiểm cú pháp theo chuẩn) và chuyên sâu (đối chiếu thêm với các design system thật trên component.gallery để bắt lỗi thiếu state). Skill này điều hướng sang các skill con ds-audit-component-naming, ds-audit-property-naming, ds-audit-structure, ds-audit-description, ds-audit-canvas, ds-audit-sources.
 ---
 
 # ds-audit: skill tổng

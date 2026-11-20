@@ -1,12 +1,23 @@
 {
   "name": "aid",
-  "owner": { "name": "AID – AI for Product Designer" },
-  "metadata": { "description": "Bộ công cụ thực hành khóa AI for Product Designer" },
+  "owner": {
+    "name": "AID – AI for Product Designer"
+  },
+  "metadata": {
+    "description": "Bộ công cụ thực hành khóa AI for Product Designer"
+  },
   "plugins": [
     {
       "name": "aid",
       "source": "./plugins/aid",
       "description": "Toàn bộ skill thực hành của khóa AID trong một plugin: làm việc với Figma desktop, sắp xếp dự án từ đề bài, audit component, audit và dựng token. Skill setup dẫn cài phần còn lại."
+    },
+    {
+      "name": "clawd-combo",
+      "source": "./plugins/clawd-combo",
+      "description": "Mod vui: pet Clawd bên trái, thanh đo context / giới hạn 5 giờ / 7 ngày ở giữa, nút Compact bên phải, nằm trên ô nhập lệnh",
+      "version": "0.1.48",
+      "category": "fun"
     }
   ]
 }

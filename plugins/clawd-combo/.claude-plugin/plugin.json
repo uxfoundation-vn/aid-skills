@@ -1,0 +1,17 @@
+{
+  "name": "clawd-combo",
+  "version": "0.1.48",
+  "description": "Clawd pet on the left, context and usage meters (from clawd-bar) in the middle, a Compact button on the right",
+  "author": {
+    "name": "Revono",
+    "url": "https://github.com/Revono"
+  },
+  "license": "MIT",
+  "keywords": [
+    "clawd",
+    "pet",
+    "mod",
+    "claude-code-mod"
+  ],
+  "types": "./types/index.d.ts"
+}
