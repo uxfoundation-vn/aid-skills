@@ -1,6 +1,6 @@
 {
   "name": "clawd-combo",
-  "version": "0.1.52",
+  "version": "0.1.54",
   "description": "Clawd pet on the left, context and usage meters (from clawd-bar) in the middle, a Compact button on the right",
   "author": {
     "name": "Revono",

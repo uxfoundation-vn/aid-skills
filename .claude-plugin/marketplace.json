@@ -16,7 +16,7 @@
       "name": "clawd-combo",
       "source": "./plugins/clawd-combo",
       "description": "Mod vui: pet Clawd bên trái, thanh đo context / giới hạn 5 giờ / 7 ngày ở giữa, nút Compact bên phải, nằm trên ô nhập lệnh",
-      "version": "0.1.52",
+      "version": "0.1.54",
       "category": "fun"
     }
   ]

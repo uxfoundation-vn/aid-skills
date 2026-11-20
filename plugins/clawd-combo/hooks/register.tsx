@@ -198,6 +198,45 @@ function cacheEnd() {
   return info.working || cacheAt === null ? null : cacheAt + cacheTtlMs
 }
 
+// the cache mark lives in module variables, which a reload of the mod (a reinstall, the app reconnecting after the
+// Mac slept) empties: it is kept in the store too, per session, and read back on the first tick or draw after a load
+const CACHE_KEY = 'cache'
+const CACHE_SESSIONS = 20
+type CacheMark = { at: number | null; ttl: number }
+let isCacheLoaded = false
+
+async function loadCache($: Dollar) {
+  if (isCacheLoaded) return
+  isCacheLoaded = true
+  try {
+    const all = (await $.store.get(CACHE_KEY)) as Record<string, CacheMark> | undefined
+    const mark = all?.[await $.session.id()]
+    if (mark && cacheAt === null) {
+      cacheAt = mark.at
+      cacheTtlMs = mark.ttl
+    }
+  } catch {
+    // no store: the mark lasts as long as the module, as before
+  }
+}
+
+async function saveCache($: Dollar) {
+  try {
+    const id = await $.session.id()
+    const all = { ...((await $.store.get(CACHE_KEY)) as Record<string, CacheMark> | undefined) }
+    delete all[id]
+    all[id] = { at: cacheAt, ttl: cacheTtlMs }
+    await $.store.set(CACHE_KEY, Object.fromEntries(Object.entries(all).slice(-CACHE_SESSIONS)))
+  } catch {
+    // a failed save costs the countdown after a reload, never the turn
+  }
+}
+
+const isCacheExpired = (now: number) => {
+  const end = cacheEnd()
+  return end !== null && now >= end
+}
+
 const CACHE_EXPIRED = 'cache expired · compact?'
 
 function cacheClock(now: number) {
@@ -598,12 +637,13 @@ let deskSig = ''
 async function onTick($: Dollar) {
   const s = await read($, settings)
   if (s.isHidden) return
+  await loadCache($)
   await update($, tick, t => (t + 1) % 100_000)
   // the desktop's pet animates itself in its Client: redraw it only when its text, colours, pet or meters change
   const t = await read($, tick)
   const v = await viewAt($, s, t)
   metersFor(v.now)
-  const sig = JSON.stringify([v.scene.main, v.scene.sub, v.sub, v.scene.color, v.scene.border, v.scene.isMainDim, v.pet.anim, metersKey, info.working, info.waiting, repos.length > 0, cacheEnd()])
+  const sig = JSON.stringify([v.scene.main, v.scene.sub, v.sub, v.scene.color, v.scene.border, v.scene.isMainDim, v.pet.anim, metersKey, info.working, info.waiting, repos.length > 0, cacheEnd(), isCacheExpired(v.now)])
   if (sig !== deskSig) {
     deskSig = sig
     await update($, deskTick, () => t)
@@ -672,9 +712,11 @@ export const register: Register = on => {
     if (!e.agentId && r.usage) {
       afterCompact = false
       const u = r.usage
+      const ttl = cacheTtlMs
       if (u.ephemeral_1h_input_tokens) cacheTtlMs = 3_600_000
       else if (u.ephemeral_5m_input_tokens) cacheTtlMs = 300_000
       if (u.cache_creation_input_tokens || u.cache_read_input_tokens) cacheAt = sentAt
+      if (cacheAt === sentAt || cacheTtlMs !== ttl) await saveCache($)
       runTokens += u.input_tokens + u.cache_creation_input_tokens + u.cache_read_input_tokens + u.output_tokens
       await refresh($)
       noteCtx(await $.clock.now())
@@ -754,6 +796,7 @@ export const register: Register = on => {
     if (result.messages) {
       afterCompact = true
       cacheAt = null // the compacted prompt starts a new cache
+      await saveCache($)
       if (info.ctx && result.tokensAfter !== undefined) {
         const max = info.ctx.max || info.ctx.window
         info = { ...info, ctx: { ...info.ctx, tokens: result.tokensAfter, pct: Math.round((result.tokensAfter / max) * 100), cats: [] } }
@@ -857,6 +900,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const s: Settings = { ...(await read($, settings)) } as Settings
     if (e.props.hasSurvey || s.isHidden) return next(e)
+    await loadCache($)
 
     // the terminal follows every tick (its pet is drawn here); the desktop only the ticks that change what it shows,
     // so its native Compact button is not rebuilt 4 times a second (that was the hover flicker)
@@ -912,7 +956,8 @@ export const register: Register = on => {
     }
 
     const { Box, Text, Button, Svg } = $.ui.resolve(e)
-    const { Client } = $.ui.resolve(e) as Elements['desktop']
+    // Client is the desktop app's alone: VS Code draws the pet as an Svg (SMIL plays it) and no countdown
+    const { Client } = e.surface === 'desktop' ? ($.ui.resolve(e) as Elements['desktop']) : { Client: undefined }
     // the app sizes an Svg from its width prop alone (none: 300px), so the meters' width comes from the band's
     // cells (8 CSS px each) less the pet (85), what the cells overcount past the band's own edge, the Compact button and
     // its gap, and the band's right padding (48 together: the bar then ends ~32 px short of the buttons), and in a repo the ⎇ button and its
@@ -953,6 +998,14 @@ export const register: Register = on => {
             {Client && end !== null && (
               <Box key="cache" flexShrink={0}>
                 <Client key="cache" module="./cache-client.tsx" props={{ endAt: end, now, color: LABEL, expiredColor: RED }} />
+              </Box>
+            )}
+            {/* VS Code has no Client to count: it shows only the expiry, which onTick's signature redraws once */}
+            {!Client && end !== null && now >= end && (
+              <Box key="cache" flexShrink={0}>
+                <Text mono size="caption" color={RED} weight="bold" wrap="truncate-end">
+                  · cache expired · compact?
+                </Text>
               </Box>
             )}
           </Box>
