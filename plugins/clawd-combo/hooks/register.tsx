@@ -2,15 +2,13 @@ import { atom, read, update } from 'claude-code'
 import type { Elements, EngineInterface, Register } from 'claude-code'
 
 import type { Base, BaseKind, BranchMenu, Reaction, ReactionKind, Settings, ToolsToday } from '../types'
-import { BASE_LOOK, draw, toMiniRaster, toRaster, toSvg } from './sprites'
-import type { Icon, Look } from './sprites'
-import { PET_ASPECT, PET_COLUMNS, PET_ROWS, moodForTool, petAnim, petCells, petSvg, shufflePet, type Mood } from './crew-pet'
+import { PET_ASPECT, moodForTool, petAnim, petSvg, shufflePet, type Mood } from './crew-pet'
 import { burnOf, k, metersSvg, span, type Info, type Sample } from './meters'
 
 // ---------------------------------------------------------------- state
 
 const base = atom({ plugin: 'clawd-combo', key: 'base' } as const, {
-  kind: 'hi',
+  kind: 'idle',
   since: 0,
   line: '',
   detail: '',
@@ -19,8 +17,7 @@ const reaction = atom({ plugin: 'clawd-combo', key: 'reaction' } as const, null 
 const settings = atom({ plugin: 'clawd-combo', key: 'settings' } as const, {
   isHidden: false,
 } as Settings)
-const tick = atom({ plugin: 'clawd-combo', key: 'tick' } as const, 0)
-// the tick the desktop band last changed at: it redraws on this, not on every tick
+// bumped when what the band shows changes: the band redraws on this, not on every tick
 const deskTick = atom({ plugin: 'clawd-combo', key: 'deskTick' } as const, 0)
 const toolsToday = atom({ plugin: 'clawd-combo', key: 'toolsToday' } as const, {
   date: '',
@@ -31,7 +28,7 @@ const branchMenu = atom({ plugin: 'clawd-combo', key: 'branchMenu' } as const, n
 
 type Dollar = EngineInterface
 
-// The Compact button's press. One function for the session's life: the band redraws 4 times a second for the pet,
+// The Compact button's press. One function for the session's life: the band redraws whenever its text changes,
 // and a fresh closure each time made the desktop rebuild the button (hover flicker, presses lost between frames).
 // refreshed at every render, so it works after a hot reload too (no session.start runs then)
 // what the last press came to, shown on the status line for a while: the press is felt even when nothing else shows
@@ -193,7 +190,7 @@ function metersText() {
 }
 
 // the prompt cache's countdown while idle: from the last request's send time to the end of its lifetime
-// (the terminal draws it in the line; the desktop hands cacheEnd() to cache-client.tsx, which counts by itself)
+// (the desktop hands cacheEnd() to cache-client.tsx, which counts by itself; VS Code shows only the expiry)
 function cacheEnd() {
   return info.working || cacheAt === null ? null : cacheAt + cacheTtlMs
 }
@@ -235,16 +232,6 @@ async function saveCache($: Dollar) {
 const isCacheExpired = (now: number) => {
   const end = cacheEnd()
   return end !== null && now >= end
-}
-
-const CACHE_EXPIRED = 'cache expired · compact?'
-
-function cacheClock(now: number) {
-  if (info.working || cacheAt === null) return ''
-  const left = cacheAt + cacheTtlMs - now
-  if (left <= 0) return CACHE_EXPIRED
-  const sec = Math.ceil(left / 1000)
-  return `cache ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`
 }
 
 // the status line's tail: the running turn's clock, or nothing (the done line carries time and tokens)
@@ -312,37 +299,6 @@ const VERBS = [
   'Wrangling…',
 ]
 
-const PET_REPLIES = [
-  '♥ ♥ ♥',
-  '♥',
-  '♥ ♥',
-  'purr… (crabs can purr)',
-  'hehe, that tickles',
-  'more pets please',
-  '*happy claw clicking*',
-  'you are my favourite human',
-  '*wiggles all four legs*',
-  'best. session. ever.',
-  'i would refactor anything for you',
-  'pets > tokens',
-  '*blushes in #d97757*',
-  'ok one more. ok two more.',
-  'this is better than a passing build',
-  '*does a tiny sideways dance*',
-  'merci vielmal! ♥',
-  'chunt guet ♥',
-  'my context window is full of love',
-  'no bugs were harmed in this pet',
-  '*leans into it*',
-  'again! again!',
-  '10/10 would be petted again',
-  'i feel so seen',
-  '♥ git commit -m "got pets" ♥',
-  '*sideways crab scuttle of joy*',
-  'you smell like coffee and good code',
-  'is this what being merged feels like?',
-]
-
 
 let lastPick = ''
 function pick(list: string[]) {
@@ -353,15 +309,6 @@ function pick(list: string[]) {
 }
 
 // ---------------------------------------------------------------- tools
-
-function iconFor(tool: string): Icon {
-  if (tool === 'Bash' || tool === 'PowerShell') return 'terminal'
-  if (tool === 'Edit' || tool === 'Write' || tool === 'NotebookEdit') return 'pencil'
-  if (tool === 'Read' || tool === 'Grep' || tool === 'Glob') return 'magnifier'
-  if (tool === 'WebFetch' || tool === 'WebSearch') return 'globe'
-  if (tool === 'Agent' || tool === 'Task') return 'mini'
-  return 'bolt'
-}
 
 function basename(path: unknown) {
   return typeof path === 'string' ? (path.split(/[\\/]/).pop() ?? path) : ''
@@ -434,26 +381,14 @@ const RED = '#e05252'
 
 type Scene = {
   mood: Mood // the crew Clawd to show
-  look: Look
   main: string
   sub: string
   color?: string
   isMainDim?: boolean
-  border?: string
 }
 
-const HOP = [0, -1, -2, -1]
-
-function compose(
-  b: Base,
-  r: Reaction | null,
-  l: Local,
-  now: number,
-  t: number,
-  tools: number,
-): Scene {
-  const look: Look = { ...BASE_LOOK, particles: [] }
-  const scene: Scene = { mood: 'idle', look, main: '', sub: '' }
+function compose(b: Base, r: Reaction | null, l: Local, now: number, tools: number): Scene {
+  const scene: Scene = { mood: 'idle', main: '', sub: '' }
   const age = now - b.since
 
   // timeouts, worked out from the clock instead of stored
@@ -465,70 +400,39 @@ function compose(
       idleSince = b.since + ms
     }
   }
-  if (kind === 'hi') expire(4_000)
-  else if (kind === 'done') expire(300_000)
+  if (kind === 'done') expire(300_000)
   else if (kind === 'thinking' || kind === 'working' || kind === 'compacting') expire(1_200_000)
   else if (kind === 'needs') expire(3_600_000)
   if (kind === 'idle' && now - idleSince > 600_000) kind = 'sleep'
 
-  const isNight = l.hour >= 22 || l.hour < 6
-
   switch (kind) {
-    case 'hi':
-      look.eyes = 'happy'
-      look.arms = 'waveR'
-      look.dy = [0, -1, 0, 0][t % 4]
-      scene.mood = 'idle'
-      scene.main = 'Hi!'
-      scene.sub = 'new session'
-      scene.color = ORANGE
-      break
     case 'thinking':
-      look.icon = 'spinner'
-      look.eyeDx = [-1, -1, 0, 1, 1, 0][Math.floor(t / 2) % 6]
-      look.dy = Math.floor(t / 3) % 2 === 0 ? 0 : -1
       scene.mood = isReplying ? 'responding' : 'thinking'
       scene.main = b.line || 'Clauding…'
       scene.sub = 'thinking'
       scene.color = ORANGE
       break
     case 'working':
-      look.legs = 'walk'
-      look.arms = 'type'
-      look.icon = iconFor(b.detail)
       scene.mood = moodForTool(b.detail)
       scene.main = b.line
       scene.sub = b.detail.replace(/^mcp__/, 'mcp ')
       break
     case 'needs': {
       const isImpatient = age > 20_000
-      look.arms = isImpatient ? 'waveR' : 'up'
-      look.eyes = 'wide'
-      look.dy = t % 8 < 4 ? HOP[t % 4] : 0
-      look.icon = b.detail === 'question' ? 'question' : 'bang'
       scene.mood = 'waiting'
-      look.isIconBlinking = true
-      const flash = t % 4 < 2 ? RED : AMBER
-      scene.border = flash
-      scene.color = flash
+      // red and amber by turns, a second each (onTick runs once a second)
+      scene.color = Math.floor(now / 1000) % 2 ? AMBER : RED
       scene.main = b.detail === 'question' ? 'Question!' : b.detail === 'plan' ? 'Plan ready' : 'Needs you!'
       scene.sub = isImpatient ? `${b.line} · waiting ${duration(age)}` : b.line
       break
     }
     case 'done':
-      look.eyes = 'happy'
-      if (age < 6_000) {
-        look.dy = HOP[t % 4]
-        look.arms = t % 4 < 2 ? 'up' : 'down'
-      }
-      if (age < 20_000) look.particles.push('sparkles')
       scene.mood = 'done'
       scene.main = 'Done!'
       scene.sub = b.line
       scene.color = GREEN
       break
     case 'compacting':
-      look.squish = [0, 1, 2, 1][t % 4]
       scene.mood = 'compacting'
       scene.main = 'Compacting'
       scene.sub = 'squeezing context'
@@ -536,17 +440,12 @@ function compose(
       break
     case 'idle':
       scene.mood = 'idle'
-      look.eyes = t % 16 === 0 ? 'closed' : 'open'
-      look.eyeDx = [0, 0, -1, -1, 0, 0, 1, 1][Math.floor(t / 4) % 8]
       scene.main = clock(l)
       scene.sub = `${tools} tools today`
       scene.isMainDim = true
       break
     case 'sleep':
       scene.mood = 'sleeping'
-      look.eyes = 'closed'
-      look.particles.push('zzz')
-      look.dim = isNight ? 0.3 : 0.5
       scene.main = clock(l)
       scene.sub = 'zzz…'
       scene.isMainDim = true
@@ -554,56 +453,26 @@ function compose(
   }
 
   // reactions sit on top for a few seconds
-  const isReacting =
-    r !== null &&
-    now < r.until &&
-    (r.kind === 'loved' ||
-      r.kind === 'oops' || r.kind === 'testsFail' || r.kind === 'testsPass')
-  if (isReacting && r) {
-    look.dim = 1
-    look.particles = look.particles.filter(p => p === 'snow' || p === 'petals' || p === 'leaves')
-    look.isIconBlinking = false
-    scene.border = undefined
+  if (r !== null && now < r.until) {
     scene.isMainDim = false
     switch (r.kind) {
       case 'oops':
-        look.eyes = 'x'
-        look.dx = [0, -1, 1, 0][t % 4]
-        look.icon = 'cross'
         scene.mood = 'error'
         scene.main = 'Oops'
         scene.sub = r.line
         scene.color = RED
         break
       case 'testsFail':
-        look.eyes = 'x'
-        look.icon = 'cross'
-        look.particles.push('drop')
         scene.mood = 'error'
         scene.main = 'Tests failed'
         scene.sub = r.line
         scene.color = RED
         break
       case 'testsPass':
-        look.eyes = 'happy'
-        look.arms = 'up'
-        look.dy = HOP[t % 4]
-        look.icon = 'check'
-        look.particles.push('confetti')
         scene.mood = 'done'
         scene.main = 'Tests pass!'
         scene.sub = r.line
         scene.color = GREEN
-        break
-      case 'loved':
-        look.eyes = 'happy'
-        look.dy = HOP[t % 4]
-        look.icon = undefined
-        look.particles.push('hearts')
-        scene.main = r.line
-        scene.mood = 'done'
-        scene.sub = 'Clawd · loved'
-        scene.color = undefined
         break
     }
   }
@@ -615,15 +484,15 @@ function compose(
 
 const TOOLS_KEY = 'tools-today'
 
-// what the band shows at tick t: shared by the render and by onTick, which works out whether the desktop changed
-async function viewAt($: Dollar, s: Settings, t: number) {
+// what the band shows now: shared by the render and by onTick, which works out whether the desktop changed
+async function viewAt($: Dollar) {
   const now = await $.clock.now()
   const b = await read($, base)
   const r = await read($, reaction)
   const l = localTime(now)
   const counted = await read($, toolsToday)
   const tools = counted.date === dateKey(l) ? counted.count : 0
-  const scene = compose(b, r, l, now, t, tools)
+  const scene = compose(b, r, l, now, tools)
   const pet = petAnim(scene.mood, now)
   const note = compactNote && Date.now() - compactNote.at < 15_000 ? compactNote.text : ''
   const clockNow = [turnClock(now), note].filter(Boolean).join(' · ')
@@ -638,20 +507,14 @@ async function onTick($: Dollar) {
   const s = await read($, settings)
   if (s.isHidden) return
   await loadCache($)
-  await update($, tick, t => (t + 1) % 100_000)
-  // the desktop's pet animates itself in its Client: redraw it only when its text, colours, pet or meters change
-  const t = await read($, tick)
-  const v = await viewAt($, s, t)
+  // the desktop's pet animates itself in its Client: redraw only when the text, colours, pet or meters change
+  const v = await viewAt($)
   metersFor(v.now)
-  const sig = JSON.stringify([v.scene.main, v.scene.sub, v.sub, v.scene.color, v.scene.border, v.scene.isMainDim, v.pet.anim, metersKey, info.working, info.waiting, repos.length > 0, cacheEnd(), isCacheExpired(v.now)])
+  const sig = JSON.stringify([v.scene.main, v.scene.sub, v.sub, v.scene.color, v.scene.isMainDim, v.pet.anim, metersKey, info.working, info.waiting, repos.length > 0, cacheEnd(), isCacheExpired(v.now)])
   if (sig !== deskSig) {
     deskSig = sig
-    await update($, deskTick, () => t)
+    await update($, deskTick, n => (n + 1) % 100_000)
   }
-}
-
-async function pet($: Dollar) {
-  await react($, 'loved', pick(PET_REPLIES), 4_000)
 }
 
 export const register: Register = on => {
@@ -669,10 +532,10 @@ export const register: Register = on => {
     if (saved) await update($, settings, s => ({ ...s, ...saved }))
     const tools = (await $.store.get(TOOLS_KEY)) as ToolsToday | undefined
     if (tools) await update($, toolsToday, () => tools)
-    await setBase($, 'hi')
-    $.clock.every(250, () => void onTick($))
+    await setBase($, 'idle')
+    $.clock.every(1000, () => void onTick($))
     await refresh($, true)
-    // limits and reset countdowns move while idle too; during a turn turn.start's ticker reads them
+    // limits move while idle too (another session spends them); during a turn turn.start's ticker reads them
     $.clock.every(60_000, () => void (info.working ? undefined : refresh($)))
 
     return next(e)
@@ -722,6 +585,20 @@ export const register: Register = on => {
       noteCtx(await $.clock.now())
     }
     return r
+  })
+
+  // the auto-compact row changed in /config: rescale CTX and move its tick now, not at the next turn's end
+  on('config.set', async ($, e, next) => {
+    const result = await next(e)
+    if (/compact/i.test(e.key) && !info.working) await refresh($, true)
+    return result
+  })
+
+  // /autocompact 250K writes the window without going through /config, so catch the command itself
+  on('command.run', { command: 'autocompact' }, async ($, e, next) => {
+    const result = await next(e)
+    if (!info.working) await refresh($, true)
+    return result
   })
 
   on('session.measure', async ($, e, next) => {
@@ -902,58 +779,16 @@ export const register: Register = on => {
     if (e.props.hasSurvey || s.isHidden) return next(e)
     await loadCache($)
 
-    // the terminal follows every tick (its pet is drawn here); the desktop only the ticks that change what it shows,
-    // so its native Compact button is not rebuilt 4 times a second (that was the hover flicker)
-    const t = e.surface === 'terminal' ? await read($, tick) : await read($, deskTick)
+    // the app only, not the terminal; read deskTick so the band redraws when onTick finds a change
+    if (e.surface === 'terminal') return next(e)
+    await read($, deskTick)
     // the branch rows: read always (its writes redraw the band), shown only between turns where there is a repo
     // (a menu of the old shape, from before a reload, counts as closed)
     const hasRepo = repos.length > 0
     const openMenu = await read($, branchMenu)
     const isBranchShown = hasRepo && !info.working
     const menu = isBranchShown && openMenu?.items ? openMenu : null
-    const { now, scene, pet, sub } = await viewAt($, s, t)
-
-    if (e.surface === 'terminal') {
-      const { Box, Text, Button, Raster } = $.ui.resolve(e)
-      const isRoomy = e.props.bodyColumns >= 64 && e.props.maxRows >= 9
-      void isRoomy
-      const art = { columns: PET_COLUMNS, rows: PET_ROWS, cells: petCells(pet.anim, pet.since, now) }
-      const row = (
-        <Box alignItems="center" gap={2} borderStyle={scene.border ? 'round' : undefined} borderColor={scene.border}>
-          <Raster key="clawd" columns={art.columns} rows={art.rows} cells={art.cells} />
-          <Box flexDirection="column" flexShrink={1} flexGrow={1}>
-            <Text mono color={scene.color} bold={!scene.isMainDim} dimColor={scene.isMainDim} wrap="truncate-end">
-              {scene.main}
-            </Text>
-            <Text mono dimColor wrap="truncate-end">
-              {sub}
-              {cacheClock(now) ? (
-                <Text color={cacheClock(now) === CACHE_EXPIRED ? RED : undefined} bold={cacheClock(now) === CACHE_EXPIRED}>
-                  {`${sub ? ' · ' : ''}${cacheClock(now)}`}
-                </Text>
-              ) : null}
-            </Text>
-            <Text mono dimColor wrap="truncate-end">
-              {metersText()}
-            </Text>
-          </Box>
-          {/* no Compact while a turn runs: /compact would only queue behind it */}
-          {isBranchShown && <Button key="branch" label={BRANCH_ICON} plain onPress={pressBranch} />}
-          {!info.working && <Button key="compact" label="compact" plain onPress={pressCompact} />}
-        </Box>
-      )
-      if (!menu) return row
-      return (
-        <Box flexDirection="column">
-          {row}
-          <Box key="branches" flexWrap="wrap" gap={2}>
-            {menu.items.map(it => (it.isCurrent
-              ? <Button key={it.key} label={`● ${it.label}`} plain onPress={pressBranch} />
-              : <Button key={it.key} label={it.label} plain dimColor onPress={pressBranch} />))}
-          </Box>
-        </Box>
-      )
-    }
+    const { now, scene, pet, sub } = await viewAt($)
 
     const { Box, Text, Button, Svg } = $.ui.resolve(e)
     // Client is the desktop app's alone: VS Code draws the pet as an Svg (SMIL plays it) and no countdown

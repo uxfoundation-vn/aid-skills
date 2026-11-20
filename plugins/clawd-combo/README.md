@@ -13,6 +13,8 @@ Mod cho Claude Code. Cài vào là có thêm một hàng ngay trên ô nhập l�
 
 Mod không cần tải thêm gói hình nào và không gửi dữ liệu ra ngoài máy.
 
+Mod chạy trên **app Claude** (tab Code) và **VS Code**. Từ bản 0.2.0, mod không còn hiện khi dùng Claude Code trong terminal.
+
 ## Cài đặt
 
 Mở Claude Code, dán nguyên câu này:

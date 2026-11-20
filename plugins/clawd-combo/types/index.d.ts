@@ -1,4 +1,4 @@
-export type BaseKind = 'hi' | 'thinking' | 'working' | 'needs' | 'done' | 'compacting' | 'idle'
+export type BaseKind = 'thinking' | 'working' | 'needs' | 'done' | 'compacting' | 'idle'
 
 export type Base = {
   kind: BaseKind
@@ -9,7 +9,7 @@ export type Base = {
   detail: string
 }
 
-export type ReactionKind = 'oops' | 'testsFail' | 'testsPass' | 'loved'
+export type ReactionKind = 'oops' | 'testsFail' | 'testsPass'
 
 export type Reaction = { kind: ReactionKind; line: string; until: number }
 
