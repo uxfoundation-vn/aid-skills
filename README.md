@@ -82,6 +82,18 @@ Mở **session Claude Code mới** rồi gõ:
 
 Claude dò máy, in bảng các phần đã có và còn thiếu, rồi dẫn bạn làm từng phần: Python, plugin Figma "Lâyơ ở mố?", MCP Figma desktop, Figma MCP, công cụ phụ, rồi chạy thử. Bạn làm xong phần nào thì báo, Claude tự kiểm tra rồi mới sang phần sau. Chi tiết ở [skill `setup`](#setup-cài-phần-còn-lại-từng-bước).
 
+### Bước 3 · (Tuỳ chọn) Cài mod `clawd-combo`
+
+Mod vui cho Claude Code: thêm một hàng ngay trên ô nhập lệnh, gồm pet Clawd bên trái, ba thanh đo context / giới hạn 5 giờ / 7 ngày ở giữa, và nút Compact bên phải.
+
+Mở Claude Code, dán nguyên câu này:
+
+```
+Cài mod clawd-combo từ marketplace aid trên GitHub uxfoundation-vn/aid-skills giúp tôi. Chưa có marketplace aid thì add trước, có rồi thì update marketplace aid, rồi cài plugin clawd-combo@aid.
+```
+
+Cài xong mở session mới là thấy mod. Muốn gỡ thì nói "gỡ mod clawd-combo".
+
 ---
 
 ## Các skill trong pack
@@ -356,6 +368,7 @@ Không quen dùng terminal thì nói với Claude: "gỡ pack AID cũ rồi cài
 
 ```
 .claude-plugin/marketplace.json     khai báo marketplace "aid"
+plugins/clawd-combo/               mod pet Clawd + thanh đo + nút Compact (tuỳ chọn)
 plugins/aid/
 ├── .claude-plugin/plugin.json      khai báo plugin "aid" (version)
 ├── hooks/                          hook SessionStart bật server claude-nav
@@ -392,3 +405,7 @@ plugins/aid/
 
   Máy còn plugin `aid-figma@aid` thì `claude plugin uninstall aid-figma@aid` trước bước 1.
 - Cài xong thì dặn người dùng mở session mới và gõ `/aid:setup`. Các bước còn lại nằm trong skill đó, đừng làm trước ở đây.
+- **Mod `clawd-combo`** (plugin thứ hai trong marketplace `aid`, tuỳ chọn):
+  1. Chưa có marketplace `aid` thì `claude plugin marketplace add uxfoundation-vn/aid-skills`, có rồi thì `claude plugin marketplace update aid`
+  2. `claude plugin install clawd-combo@aid`
+  3. Dặn người dùng mở session mới. Gỡ: `claude plugin uninstall clawd-combo@aid`
